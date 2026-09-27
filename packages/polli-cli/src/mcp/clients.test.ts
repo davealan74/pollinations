@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse, stringify } from "yaml";
 import { commandExists } from "../harnesses/fs.js";
 import { BASE_URL } from "../lib/config.js";
 import type { McpServer } from "./catalog.js";
@@ -28,7 +29,7 @@ const freshCtx = (): McpContext => ({
 });
 
 describe("client table", () => {
-    it("covers all 13 clients in the issue's priority order", () => {
+    it("covers all 14 clients in the issue's priority order", () => {
         expect(MCP_CLIENTS.map((client) => client.id)).toEqual([
             "claude-code",
             "codex",
@@ -43,6 +44,7 @@ describe("client table", () => {
             "kiro",
             "zed",
             "warp",
+            "hermes",
         ]);
     });
 });
@@ -265,6 +267,61 @@ describe("json config clients", () => {
                 "pollinations",
             ]);
         }
+    });
+});
+
+describe("hermes yaml client", () => {
+    it("installs into mcp_servers and preserves comments and other sections", async () => {
+        const ctx = freshCtx();
+        const dir = join(ctx.home, ".hermes");
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, "config.yaml");
+        writeFileSync(
+            file,
+            "# my notes\nmodel:\n  default: some-model\nmcp_servers:\n  notion:\n    url: https://mcp.notion.com/mcp\n",
+        );
+        const hermes = findClient("hermes");
+        const result = await hermes?.install(ctx, SERVERS, "sk-test");
+        expect(result?.installed.sort()).toEqual(["ffmpeg", "pollinations"]);
+
+        const text = readFileSync(file, "utf-8");
+        expect(text).toContain("# my notes");
+        expect(text).toContain("default: some-model");
+        expect(text).toContain("notion");
+        expect(hermes?.status(ctx).installed.sort()).toEqual([
+            "ffmpeg",
+            "pollinations",
+        ]);
+    });
+
+    it("does not overwrite a foreign server reusing an id, and remove keeps it", async () => {
+        const ctx = freshCtx();
+        const hermes = findClient("hermes");
+        await hermes?.install(ctx, SERVERS, "sk-test");
+        const file = join(ctx.home, ".hermes", "config.yaml");
+        const config = parse(readFileSync(file, "utf-8"));
+        // The user's own "ffmpeg" server, pointing at another provider.
+        config.mcp_servers.ffmpeg = { url: "https://elsewhere.example/mcp" };
+        writeFileSync(file, stringify(config));
+        const result = await hermes?.install(ctx, SERVERS, "sk-test");
+        expect(result?.installed).toEqual(["pollinations"]);
+        expect(
+            result?.notes.some((note) =>
+                note.includes('non-Pollinations server "ffmpeg"'),
+            ),
+        ).toBe(true);
+
+        const removed = await hermes?.remove(ctx);
+        expect(removed?.removed).toEqual(["pollinations"]);
+        const after = readFileSync(file, "utf-8");
+        expect(after).toContain("elsewhere.example");
+    });
+
+    it("recovers its key from mcp_servers headers for reinstall", async () => {
+        const ctx = freshCtx();
+        const hermes = findClient("hermes");
+        await hermes?.install(ctx, [SERVERS[0]], "sk-stored");
+        expect(hermes?.existingKey?.(ctx)).toBe("sk-stored");
     });
 });
 

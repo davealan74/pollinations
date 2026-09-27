@@ -143,6 +143,7 @@ polli harness bloom on            # creates a dedicated key for Bloom CLI
 polli harness dsh on              # DeepSeek Harness → Pollinations
 polli harness dsh on --model moonshotai/kimi-k2.6
 polli harness dsh on --no-mcp     # skip MCP tool configuration
+polli harness hermes on           # adds a named Pollinations provider + Polli skill to Hermes Agent
 polli harness opencode on         # enables the Pollinations OpenCode plugin + default model
 polli harness openclaw on         # adds the Pollinations provider + Polli skill to OpenClaw
 polli harness pi on               # native provider, key, startup model, and Polli skill
@@ -157,7 +158,9 @@ tgpt stores its provider, dedicated key, and model in `~/.config/tgpt/config.con
 The DSH adapter configures the Pollinations provider, hosted Pollinations MCP,
 and Polli CLI skill globally under `$DSH_HOME` (default `~/.dsh`). OpenCode uses
 its official plugin; OpenClaw uses `openclaw.json`, while Pi and Prime Agent use
-their native `models.json` provider support.
+their native `models.json` provider support. Hermes Agent uses its own named
+`providers` support in `~/.hermes/config.yaml`, which fetches the model catalog
+live; `polli mcp install hermes` adds the hosted Pollinations MCP servers.
 
 See [Coding Harnesses](https://github.com/pollinations/pollinations/blob/main/CODING_HARNESSES.md) for what each profile changes and how to add one.
 

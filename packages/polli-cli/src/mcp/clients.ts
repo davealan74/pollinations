@@ -1,6 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { commandExists, readTextIfExists } from "../harnesses/fs.js";
+import { isMap, parseDocument } from "yaml";
+import {
+    commandExists,
+    readTextIfExists,
+    writeTextAtomic,
+} from "../harnesses/fs.js";
+import { hermesConfigFile } from "../harnesses/hermes.js";
 import { opencodeConfigFile } from "../harnesses/opencode.js";
 import { BASE_URL } from "../lib/config.js";
 import type { McpServer } from "./catalog.js";
@@ -354,6 +360,77 @@ const jsonClients: McpClientAdapter[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// YAML config file clients (Hermes' config.yaml keeps user comments, so it
+// is edited as a document rather than parsed into a plain object).
+// ---------------------------------------------------------------------------
+
+const readYamlTable = (file: string): JsonObject => {
+    const node = parseDocument(readTextIfExists(file) ?? "").getIn([
+        "mcp_servers",
+    ]);
+    return isMap(node) ? (node.toJSON() as JsonObject) : {};
+};
+
+const writeYamlTable = (file: string, table: JsonObject) => {
+    const doc = parseDocument(readTextIfExists(file) ?? "");
+    if (Object.keys(table).length === 0) doc.deleteIn(["mcp_servers"]);
+    else doc.setIn(["mcp_servers"], doc.createNode(table));
+    writeTextAtomic(file, doc.toString({ lineWidth: 0 }), 0o600);
+};
+
+const hermes: McpClientAdapter = {
+    id: "hermes",
+    label: "Hermes Agent",
+    description: "Hermes Agent (~/.hermes/config.yaml mcp_servers)",
+    install: (ctx, servers, key) => {
+        const file = hermesConfigFile(ctx);
+        const table = readYamlTable(file);
+        const skipped: string[] = [];
+        for (const server of servers) {
+            const existing = table[server.id];
+            if (existing !== undefined && !isOwnedEntry(existing)) {
+                skipped.push(server.id);
+                continue;
+            }
+            table[server.id] = urlEntry(server, key);
+        }
+        writeYamlTable(file, table);
+        return {
+            client: "hermes",
+            label: "Hermes Agent",
+            installed: ownedEntryNames(table),
+            files: [file],
+            notes: skipped.map(
+                (serverId) =>
+                    `Kept existing non-Pollinations server "${serverId}" - not overwritten.`,
+            ),
+        };
+    },
+    remove: (ctx, serverIds) => {
+        const file = hermesConfigFile(ctx);
+        const table = readYamlTable(file);
+        const names = serverIds?.length
+            ? serverIds.filter((name) => isOwnedEntry(table[name]))
+            : ownedEntryNames(table);
+        for (const name of names) delete table[name];
+        writeYamlTable(file, table);
+        return {
+            client: "hermes",
+            label: "Hermes Agent",
+            installed: ownedEntryNames(table),
+            removed: names,
+            files: [file],
+            notes: [],
+        };
+    },
+    status: (ctx) => ({
+        installed: ownedEntryNames(readYamlTable(hermesConfigFile(ctx))),
+    }),
+    existingKey: (ctx) =>
+        recoverKeyFromTable(readYamlTable(hermesConfigFile(ctx))),
+};
+
+// ---------------------------------------------------------------------------
 // Clients configured through their own `mcp add` CLI
 // ---------------------------------------------------------------------------
 
@@ -694,7 +771,7 @@ const cliClients: McpClientAdapter[] = [
 
 // Exported table matches the issue's priority list:
 // claude-code, codex, vscode, cursor, opencode, gemini, copilot, windsurf,
-// cline, amp, kiro, zed, warp.
+// cline, amp, kiro, zed, warp, hermes.
 const PRIORITY = [
     "claude-code",
     "codex",
@@ -709,10 +786,14 @@ const PRIORITY = [
     "kiro",
     "zed",
     "warp",
+    "hermes",
 ];
 
 const byId = new Map(
-    [...cliClients, ...jsonClients].map((client) => [client.id, client]),
+    [...cliClients, ...jsonClients, hermes].map((client) => [
+        client.id,
+        client,
+    ]),
 );
 
 export const MCP_CLIENTS: McpClientAdapter[] = PRIORITY.flatMap((id) => {
