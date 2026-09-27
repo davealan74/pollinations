@@ -1,4 +1,4 @@
-name: Docs / Update README
+name: Docs / Update README news
 
 on:
   schedule:
@@ -11,49 +11,37 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      issues: write
 
     steps:
       - name: Generate Pollinations AI Token
         id: pollinations-ai
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.POLLY_BOT_APP_ID }}
           private-key: ${{ secrets.POLLY_BOT_PRIVATE_KEY }}
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Overlay news branch data
         run: |
-          git fetch origin news && git checkout origin/news -- operations/social/news/ || echo "No news branch data yet"
-          git restore --staged operations/social/news/ || true
+          git fetch origin news && git checkout origin/news -- social/news/ || echo "No news branch data yet"
+          git restore --staged social/news/ || true
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-
       - name: Update Latest News section
-        run: python operations/social/scripts/update_readme.py
-
-      - name: Update star history chart
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ steps.pollinations-ai.outputs.token }}
-        run: node .github/scripts/star-history-chart.mjs
+        run: python social/scripts/update_readme.py
 
       - name: Check for changes
         id: changes
         run: |
-          if git diff --quiet -- README.md .github/assets/star-history-*.svg; then
+          if git diff --quiet README.md; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -72,23 +60,17 @@ jobs:
 
           # Create branch, commit, push
           git checkout -b "$BRANCH"
-          git add README.md .github/assets/star-history-*.svg
+          git add README.md
           git commit -m "docs: update README — ${DATE}"
           git push -u origin "$BRANCH"
 
           # Create PR with auto-merge
           PR_URL=$(gh pr create \
             --title "docs: update README — ${DATE}" \
-            --body "Daily README update: Latest News and star history. Recent Apps is refreshed when an app is published." \
+            --body "Daily README update: Latest News section. (Recent Apps is refreshed by Apps / Update metrics.)" \
             --label "NEWS" \
             --base main)
           echo "Created PR: $PR_URL"
 
           # Enable auto-merge
           gh pr merge "$PR_URL" --auto --squash || echo "Auto-merge not available"
-
-      - name: Report failure as an issue
-        if: failure()
-        uses: ./.github/actions/failure-issue
-        with:
-          token: ${{ github.token }}

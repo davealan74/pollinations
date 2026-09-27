@@ -20,23 +20,22 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-      issues: write
 
     steps:
       - name: Generate Pollinations AI Token
         id: pollinations-ai
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.POLLY_BOT_APP_ID }}
           private-key: ${{ secrets.POLLY_BOT_PRIVATE_KEY }}
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -49,7 +48,7 @@ jobs:
           POLLINATIONS_TOKEN: ${{ secrets.PLN_GITHUB_NEWS_KEY }}
           PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number || github.event.pull_request.number }}
           REPO_FULL_NAME: ${{ github.repository }}
-        run: python operations/social/scripts/generate_realtime.py
+        run: python social/scripts/generate_realtime.py
 
       - name: Post to Discord
         env:
@@ -58,10 +57,4 @@ jobs:
           DISCORD_REALTIME_WEBHOOK_URL: ${{ secrets.DISCORD_REALTIME_WEBHOOK_URL }}
           PR_NUMBER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number || github.event.pull_request.number }}
           REPO_FULL_NAME: ${{ github.repository }}
-        run: python operations/social/scripts/publish_realtime.py
-
-      - name: Report failure as an issue
-        if: failure()
-        uses: ./.github/actions/failure-issue
-        with:
-          token: ${{ github.token }}
+        run: python social/scripts/publish_realtime.py

@@ -23,23 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
 
     steps:
       - name: Generate Pollinations AI Token
         id: pollinations-ai
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.POLLY_BOT_APP_ID }}
           private-key: ${{ secrets.POLLY_BOT_PRIVATE_KEY }}
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -47,7 +46,7 @@ jobs:
         run: pip install requests PyYAML Jinja2 paramiko
 
       - name: Overlay news branch data
-        run: git fetch origin news && git checkout origin/news -- operations/social/news/ || echo "No news branch data yet"
+        run: git fetch origin news && git checkout origin/news -- social/news/ || echo "No news branch data yet"
 
       - name: Determine mode
         id: mode
@@ -73,7 +72,7 @@ jobs:
           REDDIT_VPS_HOST: ${{ secrets.REDDIT_VPS_HOST }}
           REDDIT_VPS_USER: ${{ secrets.REDDIT_VPS_USER }}
           REDDIT_VPS_SSH_KEY: ${{ secrets.REDDIT_VPS_SSH_KEY }}
-        run: python operations/social/scripts/publish_daily.py
+        run: python social/scripts/publish_daily.py
 
       - name: Publish weekly Reddit + Discord
         if: steps.mode.outputs.mode == 'weekly'
@@ -86,10 +85,4 @@ jobs:
           REDDIT_VPS_HOST: ${{ secrets.REDDIT_VPS_HOST }}
           REDDIT_VPS_USER: ${{ secrets.REDDIT_VPS_USER }}
           REDDIT_VPS_SSH_KEY: ${{ secrets.REDDIT_VPS_SSH_KEY }}
-        run: python operations/social/scripts/publish_weekly.py
-
-      - name: Report failure as an issue
-        if: failure()
-        uses: ./.github/actions/failure-issue
-        with:
-          token: ${{ github.token }}
+        run: python social/scripts/publish_weekly.py
